@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE LambdaCase   #-}
 module Main where
 import           Codec.BMP                  (parseBMP)
 import           Data.Binary
@@ -13,8 +14,8 @@ import           Vision.Image               as I
 
 import           Graphics.Gloss
 import           Segmentation
-import           Vision.Histogram
 import           Vision.Image.Storage.DevIL (BMP (BMP), saveBS)
+
 
 main :: IO ()
 main =
@@ -25,15 +26,9 @@ main =
       Right ProgramArgs {argColor=(r,g,b,a), argDicom=dicomPath} -> do
         dicomObj <- either error id <$> readObjectFromFile dicomPath
         let fridayImg = either (error . show) id $ dicomToFriday16 dicomObj
-            fridayOgEqualizied = I.map (GreyPixel . convertPropToBounds) (equalizeImage fridayImg) :: Grey
+            -- fridayOgEqualizied = I.map (GreyPixel . convertPropToBounds) (equalizeImage fridayImg) :: Grey
             fridayOgNormalized = I.map (GreyPixel . convertPropToBounds) (normalizePeaks 0 65535 fridayImg) :: Grey
-            otsud = I.otsu (I.BinaryThreshold (I.RGBAPixel 0 0 0 0) (I.RGBAPixel r g b a)) fridayImg :: I.RGBA
-
-            -- word16to8 :: Word16 -> Word8
-            -- word16to8 w16 =
-            --   round $
-            --   (fromIntegral w16 :: Float) /
-            --   (fromIntegral (maxBound :: Word16) / fromIntegral (maxBound :: Word8))
+            otsud = I.otsu (I.BinaryThreshold (I.RGBAPixel 0 0 0 a) (I.RGBAPixel r g b a)) fridayImg :: I.RGBA
 
             -- what is this... 😭
             origPic =
@@ -49,7 +44,10 @@ main =
               mapLeft show (saveBS BMP otsud)
 
         case (origPic, otsuPic) of
-          (Right origP, Right otsuP) -> display FullScreen black (origP <> otsuP)
+          (Right origP, Right otsuP) ->
+            play (InWindow "Lab4" (256,256) (10,10)) black 0 Original
+              (\case Original -> origP; Otsu -> origP <> otsuP) keyEvents (const id)
+
           (Left err1, Left err2)     -> error (err1 ++ err2)
           (Left err1, Right _)       -> error err1
           (Right _, Left err2)       -> error err2
@@ -60,8 +58,8 @@ main =
 data ProgramArgs = ProgramArgs {argColor :: (Word8, Word8, Word8, Word8), argDicom :: FilePath}
 
 parseArgs :: [String] -> Either String ProgramArgs
-parseArgs [path, color] =
-  case splitOneOf ",." color of
+parseArgs [path, colour] =
+  case splitOneOf ",." colour of
     [rs,gs,bs,as] -> do
       r <- readEither rs
       g <- readEither gs

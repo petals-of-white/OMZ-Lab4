@@ -2,14 +2,23 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 module Segmentation where
-import           Data.Binary            (Word16, byteSwap16, decode, encode)
-import qualified Data.ByteString.Lazy   as L
-import qualified Data.DICOM             as Dicom
-import qualified Data.Vector.Storable   as VS
+import           Data.Binary                        (Word16, byteSwap16, decode,
+                                                     encode)
+import qualified Data.ByteString.Lazy               as L
+import qualified Data.DICOM                         as Dicom
+import qualified Data.Vector.Storable               as VS
+import           Graphics.Gloss.Interface.Pure.Game as Game
 import           Vision.Histogram
-import           Vision.Image           as I
+import           Vision.Image                       as I
 import           Vision.Primitive.Shape
 
+
+data Mode = Original | Otsu
+
+keyEvents :: Event -> Mode -> Mode
+keyEvents (EventKey (Char 's') Down _ _) = const Otsu
+keyEvents (EventKey (Char 'o') Down _ _) = const Original
+keyEvents _                              = id
 
 instance (ToHistogram Word16) where
   type PixelValueSpace Word16 = DIM1
