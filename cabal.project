@@ -1,2 +1,2 @@
-packages: OMZ-Lab4.cabal dicom
+packages: OMZ-Lab4.cabal dicom friday-devil
 optimization: False

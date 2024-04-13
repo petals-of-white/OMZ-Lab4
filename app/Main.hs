@@ -1,23 +1,20 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Main where
+import           Codec.BMP                  (parseBMP)
 import           Data.Binary
-import qualified Data.ByteString.Lazy as L
-import           Data.DICOM           (readObjectFromFile)
-import           Data.DICOM.Utilities as DicomMap
-import           Data.List.Split      (splitOneOf)
-import           Data.Vector.Storable (fromList)
-import           System.Environment   (getArgs)
+import qualified Data.ByteString.Lazy       as L
+import           Data.DICOM                 (readObjectFromFile)
+import           Data.DICOM.Utilities       as DicomMap
+import           Data.List.Split            (splitOneOf)
+import           System.Environment         (getArgs)
 import           Text.Read
-import           Vision.Histogram     (ToHistogram (..))
-import           Vision.Image         (Manifest (Manifest),
-                                       ThresholdType (BinaryThreshold), otsu)
-import           Vision.Primitive     (DIM1, ix1, ix2)
+import           Vision.Image               as I
 
-instance (ToHistogram Word16) where
-  type PixelValueSpace Word16 = DIM1
-  pixToIndex word = ix1 $ fromIntegral word
-  domainSize = const $ ix1 (fromIntegral (maxBound :: Word16) + 1)
+import           Graphics.Gloss
+import           Segmentation
+import           Vision.Histogram
+import           Vision.Image.Storage.DevIL (BMP (BMP), saveBS)
 
 main :: IO ()
 main =
@@ -25,27 +22,42 @@ main =
     args <- getArgs
 
     case parseArgs args of
-      Right ProgramArgs {argColor=color, argDicom=dicomPath} -> do
-        dicomMap <- DicomMap.toMap . either error id <$> readObjectFromFile dicomPath
-        let (pixByteString, row, col) = either (error . show) id $ do
-              pixBytes <- pixelData dicomMap
-              height <- rows dicomMap
-              width <- columns dicomMap
-              return (pixBytes, fromIntegral height, fromIntegral width)
+      Right ProgramArgs {argColor=(r,g,b,a), argDicom=dicomPath} -> do
+        dicomObj <- either error id <$> readObjectFromFile dicomPath
+        let fridayImg = either (error . show) id $ dicomToFriday16 dicomObj
+            fridayOgEqualizied = I.map (GreyPixel . convertPropToBounds) (equalizeImage fridayImg) :: Grey
+            fridayOgNormalized = I.map (GreyPixel . convertPropToBounds) (normalizePeaks 0 65535 fridayImg) :: Grey
+            otsud = I.otsu (I.BinaryThreshold (I.RGBAPixel 0 0 0 0) (I.RGBAPixel r g b a)) fridayImg :: I.RGBA
 
-            pixels =  byteSwap16 <$> decode (L.append (encode (row*col :: Int)) (L.fromStrict pixByteString))
-            fridayImg = Manifest (ix2 row col) (fromList pixels)
-            otsud = otsu (BinaryThreshold maxBound minBound) fridayImg :: Manifest Word16
+            -- word16to8 :: Word16 -> Word8
+            -- word16to8 w16 =
+            --   round $
+            --   (fromIntegral w16 :: Float) /
+            --   (fromIntegral (maxBound :: Word16) / fromIntegral (maxBound :: Word8))
 
+            -- what is this... 😭
+            origPic =
+              fmap bitmapOfBMP $
+              (mapLeft show . parseBMP) . L.fromStrict
+              =<<
+              mapLeft show (saveBS BMP fridayOgNormalized)
 
-        -- print otsud
-        return ()
+            otsuPic =
+              fmap bitmapOfBMP $
+              (mapLeft show . parseBMP) . L.fromStrict
+              =<<
+              mapLeft show (saveBS BMP otsud)
+
+        case (origPic, otsuPic) of
+          (Right origP, Right otsuP) -> display FullScreen black (origP <> otsuP)
+          (Left err1, Left err2)     -> error (err1 ++ err2)
+          (Left err1, Right _)       -> error err1
+          (Right _, Left err2)       -> error err2
 
       Left err -> error err
 
-    return ()
 
-data ProgramArgs = ProgramArgs {argColor :: (Float, Float, Float, Float), argDicom :: FilePath}
+data ProgramArgs = ProgramArgs {argColor :: (Word8, Word8, Word8, Word8), argDicom :: FilePath}
 
 parseArgs :: [String] -> Either String ProgramArgs
 parseArgs [path, color] =
