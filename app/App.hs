@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Segmentation where
+module App where
 import           Data.Binary                        (Word16, byteSwap16, decode,
                                                      encode)
 import qualified Data.ByteString.Lazy               as L

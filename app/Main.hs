@@ -2,18 +2,17 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE LambdaCase   #-}
 module Main where
+import           App
 import           Codec.BMP                  (parseBMP)
 import           Data.Binary
 import qualified Data.ByteString.Lazy       as L
 import           Data.DICOM                 (readObjectFromFile)
 import           Data.DICOM.Utilities       as DicomMap
 import           Data.List.Split            (splitOneOf)
+import           Graphics.Gloss
 import           System.Environment         (getArgs)
 import           Text.Read
 import           Vision.Image               as I
-
-import           Graphics.Gloss
-import           Segmentation
 import           Vision.Image.Storage.DevIL (BMP (BMP), saveBS)
 
 
@@ -26,11 +25,9 @@ main =
       Right ProgramArgs {argColor=(r,g,b,a), argDicom=dicomPath} -> do
         dicomObj <- either error id <$> readObjectFromFile dicomPath
         let fridayImg = either (error . show) id $ dicomToFriday16 dicomObj
-            -- fridayOgEqualizied = I.map (GreyPixel . convertPropToBounds) (equalizeImage fridayImg) :: Grey
-            fridayOgNormalized = I.map (GreyPixel . convertPropToBounds) (normalizePeaks 0 65535 fridayImg) :: Grey
+            fridayOgNormalized = I.map (GreyPixel . convertPropToBounds) (normalizePeaks 0 (maxBound :: Word16) fridayImg) :: Grey
             otsud = I.otsu (I.BinaryThreshold (I.RGBAPixel 0 0 0 a) (I.RGBAPixel r g b a)) fridayImg :: I.RGBA
 
-            -- what is this... 😭
             origPic =
               fmap bitmapOfBMP $
               (mapLeft show . parseBMP) . L.fromStrict
